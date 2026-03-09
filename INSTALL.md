@@ -107,7 +107,7 @@ bash ~/.openclaw/workspace/skills/video-whisper/scripts/transcribe.sh \
 | loguru | 日志库 | `pip install loguru` |
 | getuseragent | User-Agent 生成 | `pip install getuseragent` |
 | pycryptodome | 加密库 | `pip install pycryptodome` |
-| xiaohongshu 技能 | 小红书 API | 已内置在 `skills/xiaohongshutools` |
+| xiaohongshutools 技能 | 小红书 API | 从 ClawHub 安装 |
 
 ### 视频依赖（可选）
 

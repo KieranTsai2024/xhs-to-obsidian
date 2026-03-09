@@ -66,7 +66,7 @@ python3 ~/.openclaw/workspace/skills/xhs-to-obsidian/scripts/collect.py "https:/
 
 - Python 3.8+
 - aiohttp, loguru, getuseragent, pycryptodome
-- xiaohongshu 技能（OpenClaw 内置）
+- [xiaohongshutools](https://clawhub.com) 技能（从 ClawHub 安装）
 
 ### 视频依赖（可选）
 
@@ -82,7 +82,7 @@ python3 ~/.openclaw/workspace/skills/xhs-to-obsidian/scripts/collect.py "https:/
 ## 🙏 致谢
 
 - **video-whisper** — 视频转录功能基于 [video-whisper](https://github.com/openclaw/skills/tree/main/video-whisper) 技能（MLX Whisper）
-- **xiaohongshu** — 小红书 API 封装来自 OpenClaw xiaohongshu 技能
+- **xiaohongshutools** — 小红书 API 封装来自 [xiaohongshutools](https://clawhub.com) 技能（ClawHub）
 
 ---
 
