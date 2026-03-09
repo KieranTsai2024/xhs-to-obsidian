@@ -81,7 +81,7 @@ python3 ~/.openclaw/workspace/skills/xhs-to-obsidian/scripts/collect.py "https:/
 
 ## 🙏 致谢
 
-- **video-whisper** — 视频转录功能基于 [video-whisper](https://github.com/openclaw/skills/tree/main/video-whisper) 技能（MLX Whisper）
+- **[video-whisper](https://github.com/ylongw/video-whisper)** — 视频转录功能基于 ylongw 的 video-whisper 项目（MLX Whisper）
 - **xiaohongshutools** — 小红书 API 封装来自 [xiaohongshutools](https://clawhub.com) 技能（ClawHub）
 
 ---
