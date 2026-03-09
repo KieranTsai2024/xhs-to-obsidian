@@ -270,7 +270,7 @@ def aggregate_timeline_segments(segments: List[dict], max_segments: int = 20) ->
     return aggregated
 
 
-def generate_video_markdown(note_data: dict, transcript: dict, structured_summary: str = None, aggregated_segments: List[dict] = None) -> str:
+def generate_video_markdown(note_data: dict, transcript: dict, aggregated_segments: List[dict] = None) -> str:
     """生成 Markdown 内容（视频笔记）"""
     collected_date = datetime.now().strftime("%Y-%m-%d")
     
@@ -291,12 +291,6 @@ transcription_model: mlx-community/whisper-medium-mlx
 > **作者：** {note_data.get('author', '未知')}  
 > **视频时长：** {transcript.get('duration', '未知')}  
 > **转录工具：** video-whisper (mlx-whisper)
-
----
-
-## 📋 结构化总结
-
-{structured_summary if structured_summary else '*（待整理）*'}
 
 ---
 
@@ -371,17 +365,26 @@ async def transcribe_video(url: str, note_id: str) -> Optional[dict]:
         env = os.environ.copy()
         env['WHISPER_PYTHON'] = str(WHISPER_PYTHON)
         
+        # 不使用 text=True，避免 stdout 解码错误
         result = subprocess.run(
             ['bash', str(WHISPER_SCRIPT), url],
             capture_output=True,
-            text=True,
             timeout=600,  # 10 分钟超时
             env=env
         )
         
+        # 手动解码输出（容忍编码错误）
+        stdout = result.stdout.decode('utf-8', errors='replace') if result.stdout else ""
+        stderr = result.stderr.decode('utf-8', errors='replace') if result.stderr else ""
+        
         if result.returncode != 0:
-            print(f"[视频转录] 转录失败：{result.stderr}")
+            print(f"[视频转录] 转录失败：{stderr}")
             return None
+        
+        # 打印进度信息
+        for line in stdout.split('\n'):
+            if line.strip():
+                print(f"[视频转录] {line}")
         
         # 读取转录结果
         output_txt = Path("/tmp/whisper_output.txt")
@@ -389,21 +392,37 @@ async def transcribe_video(url: str, note_id: str) -> Optional[dict]:
         
         transcript_text = ""
         segments = []
+        duration = "未知"
         
         if output_txt.exists():
-            transcript_text = output_txt.read_text(encoding='utf-8')
+            try:
+                transcript_text = output_txt.read_text(encoding='utf-8')
+            except UnicodeDecodeError:
+                # 尝试其他编码
+                transcript_text = output_txt.read_text(encoding='gbk', errors='ignore')
         
         if output_json.exists():
-            with open(output_json, 'r', encoding='utf-8') as f:
-                json_data = json.load(f)
-                segments = json_data.get('segments', [])
+            try:
+                with open(output_json, 'r', encoding='utf-8') as f:
+                    json_data = json.load(f)
+                    segments = json_data.get('segments', [])
+                    duration = json_data.get('duration', '未知')
+            except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                print(f"[视频转录] 读取 JSON 失败：{e}，尝试备用编码...")
+                try:
+                    with open(output_json, 'r', encoding='gbk', errors='ignore') as f:
+                        json_data = json.load(f)
+                        segments = json_data.get('segments', [])
+                        duration = json_data.get('duration', '未知')
+                except Exception as e2:
+                    print(f"[视频转录] 备用编码也失败：{e2}")
         
         print(f"[视频转录] 转录完成，{len(segments)} 个片段，{len(transcript_text)} 字符")
         
         return {
             'text': transcript_text,
             'segments': segments,
-            'duration': json_data.get('duration', '未知') if output_json.exists() else '未知'
+            'duration': duration
         }
         
     except subprocess.TimeoutExpired:
@@ -505,10 +524,6 @@ async def collect_xhs_note(url: str, output_dir: str = DEFAULT_OUTPUT_DIR):
                 # 降级处理：当作图文
                 note_type = 'image'
             else:
-                # 保存完整文字稿到临时文件，供 KK 后续总结
-                transcript_txt = Path(f"/tmp/xhs_transcript_{note_id}.txt")
-                transcript_txt.write_text(transcript.get('text', ''), encoding='utf-8')
-                
                 # 时间轴分段聚合
                 aggregated_segments = None
                 timeline_enabled = CONFIG.get("timeline_segment_enabled", True)
@@ -524,44 +539,18 @@ async def collect_xhs_note(url: str, output_dir: str = DEFAULT_OUTPUT_DIR):
                 filename = f"视频转录-{note_data['author']}-{safe_title}.md"
                 filepath = output_path / filename
                 
-                # 先保存一个占位版本
-                structured_summary_placeholder = f"""*📝 结构化总结生成中 —— KK 正在处理...*
-
-> 完整文字稿已保存，KK 将自动生成结构化总结（分级标题 + 要点列表 + 金句 + 表格）。"""
-                
-                md_content_placeholder = generate_video_markdown(
+                # 生成 Markdown（只保留元数据、文字稿、时间轴）
+                md_content = generate_video_markdown(
                     note_data, 
                     transcript, 
-                    structured_summary_placeholder,
                     aggregated_segments
                 )
                 
                 with open(filepath, 'w', encoding='utf-8') as f:
-                    f.write(md_content_placeholder)
-                
-                # 保存文件路径到临时文件，方便 KK 找到
-                Path(f"/tmp/xhs_md_path_{note_id}.txt").write_text(str(filepath), encoding='utf-8')
+                    f.write(md_content)
                 
                 print(f"\n✅ 视频转录完成：{filepath}")
                 print(f"⏱️ 时间轴已聚合：{len(aggregated_segments) if aggregated_segments else len(transcript.get('segments', []))} 段")
-                
-                # 自动触发 KK 后处理（方案 A：调用 auto_summary.py）
-                auto_summary_enabled = CONFIG.get("auto_summary_enabled", True)
-                if auto_summary_enabled:
-                    # 调用 auto_summary.py 触发通知
-                    auto_summary_script = Path(__file__).parent / "auto_summary.py"
-                    if auto_summary_script.exists():
-                        subprocess.run(
-                            [sys.executable, str(auto_summary_script), note_id],
-                            capture_output=True,
-                            text=True
-                        )
-                        print(f"🔔 已通知 KK 自动生成结构化总结...")
-                    else:
-                        print(f"⚠️ 找不到 auto_summary.py，使用手动处理")
-                        print(f"📋 结构化总结待处理（临时文件：/tmp/xhs_transcript_{note_id}.txt）")
-                else:
-                    print(f"📋 结构化总结待手动处理（临时文件：/tmp/xhs_transcript_{note_id}.txt）")
                 
                 return
         
