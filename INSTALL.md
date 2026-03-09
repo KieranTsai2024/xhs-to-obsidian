@@ -24,7 +24,12 @@ pip3 install --break-system-packages aiohttp loguru getuseragent pycryptodome
 
 # 或使用 --user 标志（推荐）
 pip3 install --user aiohttp loguru getuseragent pycryptodome
+
+# OCR 功能依赖（macOS 专用，支持图片文字识别）
+pip3 install --break-system-packages pyobjc-framework-Vision pyobjc-framework-Quartz pyobjc-framework-Cocoa
 ```
+
+> 💡 **提示**：OCR 功能仅 macOS 需要。Windows/Linux 用户可跳过，或使用 tesseract（`brew install tesseract` + `pip install pytesseract`）
 
 ### 步骤 3：安装视频转录依赖（可选）
 
@@ -108,6 +113,16 @@ bash ~/.openclaw/workspace/skills/video-whisper/scripts/transcribe.sh \
 | getuseragent | User-Agent 生成 | `pip install getuseragent` |
 | pycryptodome | 加密库 | `pip install pycryptodome` |
 | xiaohongshutools 技能 | 小红书 API | 从 ClawHub 安装 |
+
+### OCR 依赖（macOS 专用，推荐）
+
+| 依赖 | 用途 | 安装命令 |
+|------|------|----------|
+| pyobjc-framework-Vision | macOS Vision Framework | `pip install pyobjc-framework-Vision` |
+| pyobjc-framework-Quartz | macOS Quartz Framework | `pip install pyobjc-framework-Quartz` |
+| pyobjc-framework-Cocoa | macOS Cocoa Framework | `pip install pyobjc-framework-Cocoa` |
+
+> 💡 **说明**：OCR 功能用于识别图片中的文字。macOS 用户使用 Vision Framework（原生支持中文），Windows/Linux 用户可选装 tesseract。
 
 ### 视频依赖（可选）
 

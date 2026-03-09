@@ -57,8 +57,15 @@ tar -xzf xhs-to-obsidian.tar.gz -C ~/.openclaw/workspace/skills/
 
 ### 手动运行脚本
 
+**方式 1：完整流程（推荐）**
 ```bash
 cd ~/.openclaw/workspace/skills/xhs-to-obsidian
+python scripts/kk_collect.py <小红书链接> [输出目录]
+```
+自动完成：转录/下载 → 生成总结 → 更新文件
+
+**方式 2：仅转录/下载**
+```bash
 python scripts/collect.py <小红书链接> [输出目录]
 ```
 
@@ -67,10 +74,12 @@ python scripts/collect.py <小红书链接> [输出目录]
 1. **自动类型识别** - 智能判断图文/视频笔记
 2. **自动解析** - 支持标准链接和 xhslink.com 短链
 3. **内容提取** - 获取标题、作者、正文、发布时间
-4. **图片下载** - 下载笔记中的所有图片（最多 10 张）
+4. **图片下载** - 下载笔记中的所有图片（**默认最多 25 张**，可配置）
 5. **OCR 识别** - 对图片进行文字识别（可选）
 6. **视频转录** - 调用 video-whisper 本地转录（Apple Silicon）
-7. **格式化存储** - 按模板生成 Markdown 存入 Obsidian
+7. **时间轴聚合** - 自动将逐句时间轴合并为分段式（~20 段）
+8. **结构化总结** - KK 自动生成（核心主题 + 分级内容 + 金句 + 表格）
+9. **格式化存储** - 按模板生成 Markdown 存入 Obsidian
 
 ## 输出模板
 
@@ -109,12 +118,19 @@ transcription_model: mlx-community/whisper-medium-mlx
 
 # [笔记标题]
 
+## 📋 结构化总结
+[KK 自动生成的总结：核心主题 + 分级内容 + 金句 + 表格]
+
+---
+
 ## 📝 完整文字稿
 [转录的完整文字稿]
 
-## 📍 时间轴
-- **[0:00-0:30]** 第一段内容...
-- **[0:30-1:15]** 第二段内容...
+---
+
+## 📍 分段式时间轴
+- **[0:00-0:44]** 第一段内容...
+- **[0:44-1:16]** 第二段内容...
 ```
 
 ## 默认存储位置
@@ -127,19 +143,28 @@ transcription_model: mlx-community/whisper-medium-mlx
 
 ## 配置自定义
 
-编辑 `scripts/collect.py` 修改默认配置：
+编辑 `config.json` 修改配置：
 
-```python
-DEFAULT_OUTPUT_DIR = "/你的/笔记/存储/路径"
-DEFAULT_IMAGE_DIR = "/你的/图片/存储/路径"
+```json
+{
+  "image_max_count": 25,          // 图片最大下载数量
+  "timeline_segment_enabled": true,  // 启用时间轴聚合
+  "timeline_segment_max": 20,        // 时间轴目标分段数
+  "auto_summary_enabled": true       // 启用 KK 自动总结
+}
 ```
 
 ## 依赖
 
 ### 图文笔记
 - Python 3.8+
-- aiohttp
+- aiohttp, loguru, getuseragent, pycryptodome
 - xiaohongshu 技能（已内置）
+- OCR 功能（macOS）：pyobjc-framework-Vision, pyobjc-framework-Quartz
+
+### 图文笔记（OCR 功能）
+- macOS Vision Framework（自动调用，无需额外安装）
+- 首次使用会安装：`pip install pyobjc-framework-Vision pyobjc-framework-Quartz`
 
 ### 视频笔记（额外需要）
 - video-whisper 技能
@@ -157,10 +182,11 @@ python3 -m venv ~/.openclaw/venvs/whisper
 
 1. **短链处理** - xhslink.com 短链会自动展开
 2. **登录态** - 部分笔记需要登录态才能访问，可提供 web_session cookie
-3. **图片数量** - 默认最多下载 10 张图片
-4. **OCR 功能** - 当前为简化实现，可集成 tesseract 或其他 OCR 服务
+3. **图片数量** - 默认最多下载 25 张图片（可在 config.json 调整）
+4. **OCR 功能** - macOS 原生 Vision Framework 支持（自动识别图片文字，支持中文）
 5. **视频转录** - 首次使用需下载 Whisper 模型（约 1.5GB），之后会缓存
 6. **视频时长** - 长视频（>10 分钟）转录可能需要几分钟
+7. **自动总结** - 视频笔记完成后 KK 会自动生成结构化总结（无需手动触发）
 
 ## 故障排除
 
@@ -179,10 +205,39 @@ python3 -m venv ~/.openclaw/venvs/whisper
 - 长视频可能需要更长时间，脚本超时设为 10 分钟
 
 ### OCR 无结果
-- 当前为简化实现
-- 可集成 `brew install tesseract` 增强 OCR 能力
+- 检查是否安装了 pyobjc 依赖：`pip install pyobjc-framework-Vision pyobjc-framework-Quartz`
+- 确认图片清晰可读（模糊图片可能无法识别）
+- macOS Vision Framework 仅支持 macOS 10.15+
+
+### 自动总结未触发
+- 检查 `config.json` 中 `auto_summary_enabled` 是否为 `true`
+- 检查 `pending/` 目录是否有通知文件
+- KK 会定期检查 pending 目录并处理
 
 ## 相关文件
 
-- `scripts/collect.py` - 主脚本
-- `references/template.md` - 输出模板参考
+- `scripts/collect.py` - 主脚本（转录/下载）
+- `scripts/kk_collect.py` - 完整流程脚本（推荐）
+- `scripts/auto_summary.py` - 自动总结触发脚本
+- `scripts/kk_summary.py` - KK 总结处理脚本
+- `scripts/kk_process_pending.py` - KK pending 处理脚本
+- `pending/` - KK 待处理通知目录
+- `config.json` - 配置文件
+
+## 自动化流程
+
+```
+用户发送链接
+    ↓
+collect.py 解析并转录
+    ↓
+保存临时文件 + 写入 pending 通知
+    ↓
+auto_summary.py 触发通知
+    ↓
+KK 读取 pending 目录
+    ↓
+KK 生成结构化总结并更新 MD 文件
+    ↓
+✅ 完成（无需手动干预）
+```

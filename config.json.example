@@ -2,5 +2,9 @@
   "web_session": "YOUR_WEB_SESSION_COOKIE_HERE",
   "proxy": null,
   "output_dir": "/Users/your_username/Desktop/PARA_系统仓库/A.收集",
-  "image_dir": "/Users/your_username/Desktop/PARA_系统仓库/A.收集/attachments"
+  "image_dir": "/Users/your_username/Desktop/PARA_系统仓库/A.收集/attachments",
+  "image_max_count": 25,
+  "timeline_segment_enabled": true,
+  "timeline_segment_max": 20,
+  "auto_summary_enabled": true
 }

@@ -2,6 +2,7 @@
 config.json
 
 # 运行时输出（笔记文件）
+# 允许 README.md, INSTALL.md, SKILL.md
 *.md
 !README.md
 !INSTALL.md

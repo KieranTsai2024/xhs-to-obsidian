@@ -17,7 +17,7 @@ import aiohttp
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any, List
 
 # 添加 xiaohongshu 技能路径
 XHS_SKILL_PATH = Path.home() / ".openclaw" / "workspace" / "skills" / "xiaohongshutools" / "scripts"
@@ -35,7 +35,11 @@ DEFAULT_CONFIG = {
     "web_session": None,
     "proxy": None,
     "output_dir": "/Users/kierantsai/Desktop/PARA_系统仓库/A.收集",
-    "image_dir": "/Users/kierantsai/Desktop/PARA_系统仓库/A.收集/attachments"
+    "image_dir": "/Users/kierantsai/Desktop/PARA_系统仓库/A.收集/attachments",
+    "image_max_count": 25,
+    "timeline_segment_enabled": True,
+    "timeline_segment_max": 20,
+    "auto_summary_enabled": True
 }
 
 def load_config() -> dict:
@@ -86,21 +90,41 @@ async def download_image(session: aiohttp.ClientSession, url: str, save_path: st
 async def ocr_image(image_path: str) -> str:
     """
     对图片进行 OCR 识别
-    使用 macOS 自带的 Vision Framework 或 tesseract
+    使用 macOS 自带的 Vision Framework（通过 Python + pyobjc）
     """
     try:
-        # 尝试使用 macOS 自带的 OCR
+        # 使用 macOS Vision Framework 进行 OCR
         import subprocess
-        result = subprocess.run(
-            ['osascript', '-e', f'''
-                tell application "System Events"
-                    set imageFile to POSIX file "{image_path}"
-                end tell
-            '''],
-            capture_output=True,
-            text=True
-        )
-        # 简化：返回空字符串，实际可以集成 tesseract 或其他 OCR
+        
+        # 创建一个临时 Python 脚本来调用 Vision
+        vision_script = Path(__file__).parent / "macos_vision_ocr.py"
+        
+        if vision_script.exists():
+            result = subprocess.run(
+                [sys.executable, str(vision_script), image_path],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        
+        # Fallback: 尝试使用 tesseract（如果已安装）
+        try:
+            result = subprocess.run(
+                ['tesseract', image_path, 'stdout', '-l', 'chi_sim+eng'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except FileNotFoundError:
+            pass  # tesseract 未安装
+        
+        return ""
+    except subprocess.TimeoutExpired:
+        print(f"OCR 超时：{image_path}")
         return ""
     except Exception as e:
         print(f"OCR 失败：{e}")
@@ -143,7 +167,110 @@ collected_date: {collected_date}
     return md
 
 
-def generate_video_markdown(note_data: dict, transcript: dict) -> str:
+def generate_structured_summary_simple(transcript_text: str, title: str) -> str:
+    """
+    生成简单的结构化整理稿（基于规则的摘要）
+    这是一个简化版本，提取关键段落和金句
+    """
+    print("[整理稿] 正在生成简化版整理稿...")
+    
+    # 分割成段落
+    paragraphs = [p.strip() for p in transcript_text.split('\n\n') if p.strip()]
+    
+    # 提取可能的标题/分段（包含冒号或数字的行）
+    sections = []
+    current_section = None
+    current_content = []
+    
+    for para in paragraphs[:50]:  # 限制处理前 50 段
+        # 检测是否是新段落标题
+        if any(pattern in para for pattern in ['第一', '第二', '第三', '首先', '其次', '最后', '注意', '提醒', '总结']):
+            if current_section and current_content:
+                sections.append((current_section, current_content))
+            current_section = para[:100]
+            current_content = []
+        else:
+            current_content.append(para)
+    
+    if current_section and current_content:
+        sections.append((current_section, current_content))
+    
+    # 构建简化整理稿
+    summary = f"""## 🎯 核心主题
+
+{title}
+
+---
+
+## 📌 主要内容
+
+"""
+    
+    for i, (section, content) in enumerate(sections[:8], 1):  # 最多 8 个部分
+        summary += f"### {i}. {section}\n\n"
+        for c in content[:3]:  # 每部分最多 3 段
+            summary += f"- {c[:200]}...\n" if len(c) > 200 else f"- {c}\n"
+        summary += "\n"
+    
+    # 提取可能的金句（带引号或感叹号的句子）
+    quotes = []
+    for para in paragraphs:
+        if ('"' in para or '!' in para or '！' in para) and len(para) < 150:
+            quotes.append(para.strip())
+    
+    if quotes:
+        summary += "---\n\n## 💬 关键语录\n\n"
+        for q in quotes[:5]:
+            summary += f"> {q}\n\n"
+    
+    summary += f"\n*注：这是自动生成的简化整理稿，详细内容见下方完整文字稿。*"
+    
+    print(f"[整理稿] 生成完成，{len(summary)} 字符")
+    return summary
+
+
+def aggregate_timeline_segments(segments: List[dict], max_segments: int = 20) -> List[dict]:
+    """
+    将时间轴片段分段聚合，避免一句话一条
+    策略：按内容语义相近性合并相邻片段，目标控制在 max_segments 以内
+    
+    返回：聚合后的片段列表
+    """
+    if not segments or len(segments) <= max_segments:
+        return segments
+    
+    print(f"[时间轴] 正在聚合时间轴：{len(segments)} 个片段 → 目标 {max_segments} 个")
+    
+    # 简单策略：按固定比例合并
+    # 计算每组需要合并多少个片段
+    group_size = len(segments) // max_segments + 1
+    
+    aggregated = []
+    i = 0
+    while i < len(segments):
+        # 取一组片段
+        group = segments[i:i + group_size]
+        if not group:
+            break
+        
+        # 合并这组片段
+        start_time = group[0].get('start', 0)
+        end_time = group[-1].get('end', 0)
+        merged_text = ' '.join(seg.get('text', '').strip() for seg in group if seg.get('text'))
+        
+        aggregated.append({
+            'start': start_time,
+            'end': end_time,
+            'text': merged_text.strip()
+        })
+        
+        i += group_size
+    
+    print(f"[时间轴] 聚合完成：{len(aggregated)} 个片段")
+    return aggregated
+
+
+def generate_video_markdown(note_data: dict, transcript: dict, structured_summary: str = None, aggregated_segments: List[dict] = None) -> str:
     """生成 Markdown 内容（视频笔记）"""
     collected_date = datetime.now().strftime("%Y-%m-%d")
     
@@ -167,18 +294,24 @@ transcription_model: mlx-community/whisper-medium-mlx
 
 ---
 
+## 📋 结构化总结
+
+{structured_summary if structured_summary else '*（待整理）*'}
+
+---
+
 ## 📝 完整文字稿
 
 {transcript.get('text', '转录失败')}
 
 ---
 
-## 📍 时间轴
+## 📍 分段式时间轴
 
 """
     
-    # 添加时间轴
-    segments = transcript.get('segments', [])
+    # 使用聚合后的时间轴（如果有）
+    segments = aggregated_segments if aggregated_segments else transcript.get('segments', [])
     for i, seg in enumerate(segments, 1):
         start = seg.get('start', 0)
         end = seg.get('end', 0)
@@ -372,18 +505,64 @@ async def collect_xhs_note(url: str, output_dir: str = DEFAULT_OUTPUT_DIR):
                 # 降级处理：当作图文
                 note_type = 'image'
             else:
-                # 生成视频 Markdown
-                md_content = generate_video_markdown(note_data, transcript)
+                # 保存完整文字稿到临时文件，供 KK 后续总结
+                transcript_txt = Path(f"/tmp/xhs_transcript_{note_id}.txt")
+                transcript_txt.write_text(transcript.get('text', ''), encoding='utf-8')
+                
+                # 时间轴分段聚合
+                aggregated_segments = None
+                timeline_enabled = CONFIG.get("timeline_segment_enabled", True)
+                if timeline_enabled:
+                    max_segments = CONFIG.get("timeline_segment_max", 20)
+                    aggregated_segments = aggregate_timeline_segments(
+                        transcript.get('segments', []),
+                        max_segments=max_segments
+                    )
                 
                 # 保存文件
                 safe_title = re.sub(r'[^\w\u4e00-\u9fff-]', '_', note_data['title'])[:50]
                 filename = f"视频转录-{note_data['author']}-{safe_title}.md"
                 filepath = output_path / filename
                 
+                # 先保存一个占位版本
+                structured_summary_placeholder = f"""*📝 结构化总结生成中 —— KK 正在处理...*
+
+> 完整文字稿已保存，KK 将自动生成结构化总结（分级标题 + 要点列表 + 金句 + 表格）。"""
+                
+                md_content_placeholder = generate_video_markdown(
+                    note_data, 
+                    transcript, 
+                    structured_summary_placeholder,
+                    aggregated_segments
+                )
+                
                 with open(filepath, 'w', encoding='utf-8') as f:
-                    f.write(md_content)
+                    f.write(md_content_placeholder)
+                
+                # 保存文件路径到临时文件，方便 KK 找到
+                Path(f"/tmp/xhs_md_path_{note_id}.txt").write_text(str(filepath), encoding='utf-8')
                 
                 print(f"\n✅ 视频转录完成：{filepath}")
+                print(f"⏱️ 时间轴已聚合：{len(aggregated_segments) if aggregated_segments else len(transcript.get('segments', []))} 段")
+                
+                # 自动触发 KK 后处理（方案 A：调用 auto_summary.py）
+                auto_summary_enabled = CONFIG.get("auto_summary_enabled", True)
+                if auto_summary_enabled:
+                    # 调用 auto_summary.py 触发通知
+                    auto_summary_script = Path(__file__).parent / "auto_summary.py"
+                    if auto_summary_script.exists():
+                        subprocess.run(
+                            [sys.executable, str(auto_summary_script), note_id],
+                            capture_output=True,
+                            text=True
+                        )
+                        print(f"🔔 已通知 KK 自动生成结构化总结...")
+                    else:
+                        print(f"⚠️ 找不到 auto_summary.py，使用手动处理")
+                        print(f"📋 结构化总结待处理（临时文件：/tmp/xhs_transcript_{note_id}.txt）")
+                else:
+                    print(f"📋 结构化总结待手动处理（临时文件：/tmp/xhs_transcript_{note_id}.txt）")
+                
                 return
         
         # 图文笔记：下载图片 + OCR（或降级处理）
@@ -400,8 +579,9 @@ async def collect_xhs_note(url: str, output_dir: str = DEFAULT_OUTPUT_DIR):
             image_paths = []
             ocr_results = []
             
+            image_max_count = CONFIG.get("image_max_count", 25)
             async with aiohttp.ClientSession() as http_session:
-                for i, img_info in enumerate(image_list[:10], 1):  # 最多 10 张
+                for i, img_info in enumerate(image_list[:image_max_count], 1):  # 最多 25 张
                     img_url = img_info.get('url', '')
                     if not img_url and isinstance(img_info, dict):
                         # 尝试其他可能的字段

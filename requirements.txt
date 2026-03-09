@@ -1,0 +1,17 @@
+# xhs-to-obsidian 依赖清单
+
+# 基础依赖（图文笔记必需）
+aiohttp>=3.9.0
+loguru>=0.7.0
+getuseragent>=1.0.0
+pycryptodome>=3.19.0
+
+# OCR 功能（macOS 原生 Vision Framework）
+# 仅 macOS 需要，Windows/Linux 可忽略或使用 tesseract
+pyobjc-framework-Vision>=12.0; sys_platform == 'darwin'
+pyobjc-framework-Quartz>=12.0; sys_platform == 'darwin'
+pyobjc-framework-Cocoa>=12.0; sys_platform == 'darwin'
+
+# 视频转录依赖（可选，需要 video-whisper 技能）
+# 通过 Homebrew 安装：brew install yt-dlp ffmpeg
+# Python 包：mlx-whisper（仅 Apple Silicon）
