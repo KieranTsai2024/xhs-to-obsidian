@@ -1,0 +1,60 @@
+# 个人配置（包含登录态，不要提交）
+config.json
+
+# 运行时输出（笔记文件）
+*.md
+!README.md
+!INSTALL.md
+!SKILL.md
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# 运行时输出
+attachments/
+*.md
+
+# 日志
+*.log
+
+# 临时文件
+/tmp/
+*.tmp
