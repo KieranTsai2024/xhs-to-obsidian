@@ -75,7 +75,14 @@ python3 ~/.openclaw/workspace/skills/xhs-to-obsidian/scripts/collect.py "https:/
 - Apple Silicon Mac (M1/M2/M3/M4)
 - `brew install yt-dlp ffmpeg`
 - `pip install mlx-whisper`
-- video-whisper 技能
+- [video-whisper](https://github.com/openclaw/skills/tree/main/video-whisper) 技能
+
+---
+
+## 🙏 致谢
+
+- **video-whisper** — 视频转录功能基于 [video-whisper](https://github.com/openclaw/skills/tree/main/video-whisper) 技能（MLX Whisper）
+- **xiaohongshu** — 小红书 API 封装来自 OpenClaw xiaohongshu 技能
 
 ---
 
@@ -98,8 +105,8 @@ xhs-to-obsidian/
 
 ## 🔒 安全提示
 
-- ⚠️ **不要提交 `config.json`** — 包含个人登录态
-- ✅ 使用 `config.json.example` 模板
+- ⚠️ **不要分享 `config.json`** — 包含你的小红书登录态（cookie）
+- ✅ 分享配置时用 `config.json.example` 模板
 - 🔐 web_session cookie 可能过期，定期更新
 
 ---
